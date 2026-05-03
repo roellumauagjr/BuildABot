@@ -8,9 +8,12 @@ import RobotPreview from './RobotPreview'
 export default function BuildScreen({ onBack }) {
   const { materials, unlockedRobotIds, buildRobot, scrap } = useGameStore()
   const [activeIndex, setActiveIndex] = useState(0)
-  const [showRecipe, setShowRecipe] = useState(null) // ID of robot to show recipe for
+  const [showRecipe, setShowRecipe] = useState(null)
 
-  const currentRobot = ROBOT_LIBRARY[activeIndex]
+  const library = Array.isArray(ROBOT_LIBRARY) && ROBOT_LIBRARY.length > 0 ? ROBOT_LIBRARY : []
+  const currentRobot = library[activeIndex]
+  if (!currentRobot) return null
+
   const isUnlocked = unlockedRobotIds.includes(currentRobot.id)
   const isPrereqMet = !currentRobot.prerequisiteId || unlockedRobotIds.includes(currentRobot.prerequisiteId)
 
@@ -48,7 +51,7 @@ export default function BuildScreen({ onBack }) {
       {/* Carousel Area */}
       <div className="forge-carousel">
         <div className="carousel-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
-          {ROBOT_LIBRARY.map((robot, idx) => {
+          {library.map((robot, idx) => {
             const unlocked = unlockedRobotIds.includes(robot.id)
             
             return (
@@ -57,7 +60,8 @@ export default function BuildScreen({ onBack }) {
                   <div className="robot-silhouette">
                     <RobotPreview 
                       robotId={robot.id} 
-                      isUnlocked={unlocked} 
+                      isUnlocked={unlocked}
+                      active={activeIndex === idx}
                     />
                     
                     {!unlocked && (

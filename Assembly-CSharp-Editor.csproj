@@ -61,6 +61,7 @@
     <Analyzer Include="C:\Program Files\Unity\Hub\Editor\6000.4.1f1\Editor\Data\Tools\BuildPipeline\Unity.SourceGenerators\Unity.UIToolkit.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Editor\InternetPermissionSetter.cs" />
     <Compile Include="Assets\Scripts\WebView\Editor\WebViewSceneSetup.cs" />
     <Compile Include="Assets\Scripts\Editor\AndroidManifestPostProcessor.cs" />
   </ItemGroup>

@@ -146,6 +146,10 @@ public class WebViewManager : MonoBehaviour
 
         if (autoShowOnLoad)
             ShowWebView();
+
+        // Hide the white startup cover canvas now that the React UI is visible.
+        // This is the definitive signal that the screen is ready for the user.
+        ARBotController.Instance?.HideCover();
     }
 
     // ─── JS Bridge injection ──────────────────────────────────────────────
@@ -381,24 +385,43 @@ private void DispatchIncoming(UnityBridge.Message msg)
         if (p == null || string.IsNullOrEmpty(p.page)) return;
         
         SetCurrentPage(p.page);
-        
-        Debug.Log($"[WebViewManager] HandleSetPage received: page='{p.page}'");
-        
-        // We keep the WebView visible for all pages now.
-        // For 'scan' and 'battle', CSS makes the background transparent.
-        Debug.Log($"[WebViewManager] SET_PAGE '{p.page}' - showing WebView");
-        ShowWebView();
-        
-        // If entering forge, show the 3D showcase
-        if (p.page == "forge")
+        Debug.Log($"[WebViewManager] HandleSetPage: page='{p.page}'");
+
+        switch (p.page)
         {
-            ForgeManager.Instance?.ShowShowcase(true);
-        }
-        else
-        {
-            ForgeManager.Instance?.ShowShowcase(false);
+            case "hub":
+            case "forge":
+                // Non-AR pages: disable camera, solid white background
+                ARBotController.Instance?.StopAR();
+                ForgeManager.Instance?.ShowShowcase(p.page == "forge");
+                ShowWebView();
+                Debug.Log($"[WebViewManager] {p.page} — AR stopped, solid background.");
+                break;
+
+            case "scan":
+                // Scanner: enable AR camera passthrough immediately
+                ForgeManager.Instance?.ShowShowcase(false);
+                ARBotController.Instance?.StartAR();
+                ShowWebView();
+                Debug.Log("[WebViewManager] scan — AR camera started for passthrough.");
+                break;
+
+            case "battle":
+                // Battle LANDING page: AR is off (white background).
+                // AR only activates when user taps "Enter AR Arena" (INITIATE_AR fires).
+                ForgeManager.Instance?.ShowShowcase(false);
+                ARBotController.Instance?.StopAR();
+                ShowWebView();
+                Debug.Log("[WebViewManager] battle landing — AR off, waiting for INITIATE_AR.");
+                break;
+
+            default:
+                ARBotController.Instance?.StopAR();
+                ShowWebView();
+                break;
         }
     }
+
 
     private void HandleSelectForgeBot(string payloadJson)
     {

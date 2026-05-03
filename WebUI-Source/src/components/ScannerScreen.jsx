@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Icon } from './Icons'
 import { useGameStore } from '../stores/useGameStore'
+import { useUnityBridge, ACTIONS } from '../hooks/useUnityBridge'
 import { COLORS } from '../constants/theme'
 import LootReward from './LootReward'
 
@@ -14,22 +15,46 @@ export default function ScannerScreen({ onCapture, onBack }) {
   const [capturedFrame, setCapturedFrame] = useState(null)
   const [scanStage, setScanStage] = useState('idle')
   const [cameraError, setCameraError] = useState(null)
-  
   const [analysisError, setAnalysisError] = useState(null)
+  // True once we confirm window._unityBridge exists — controls video rendering
+  const [inUnityMode, setInUnityMode] = useState(false)
   
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
-  const { addMaterial, addScrap } = useGameStore()
-  
-  // Initialize Camera
-  useEffect(() => {
-    if (scanStage === 'idle') {
-      startCamera()
-    }
-    return () => stopCamera()
-  }, [scanStage])
-
   const isInitializing = useRef(false)
+  const { addMaterial, addScrap } = useGameStore()
+  const sendToUnity = useUnityBridge()
+  
+  // Detect Unity bridge synchronously first — by the time the user navigates
+  // to Scanner the bridge is already injected (page loaded earlier).
+  // Fall back to a 800ms wait only if not immediately found.
+  useEffect(() => {
+    let mounted = true
+
+    const tryDetect = (immediate) => {
+      const isUnity = !!(window._unityBridge?.send)
+      if (!mounted) return
+      if (isUnity) {
+        setInUnityMode(true)
+        // AR camera already started by WebViewManager (SET_PAGE=scan → StartAR)
+      } else if (!immediate) {
+        // Not Unity — start native camera
+        startCamera()
+      }
+    }
+
+    // Synchronous check
+    tryDetect(true)
+
+    // If not found immediately, wait 800ms and try again
+    const timer = setTimeout(() => tryDetect(false), 800)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+      stopCamera()
+    }
+  }, [])
 
   const startCamera = async () => {
     if (isInitializing.current) return
@@ -174,29 +199,55 @@ export default function ScannerScreen({ onCapture, onBack }) {
   }
   
   const handleShutter = useCallback(() => {
-    if (isProcessing || !videoRef.current || analysisError) return
-    
+    if (isProcessing || analysisError) return
+
     setScanStage('capturing')
-    
-    // Draw frame to canvas
+    setIsProcessing(true)  // ← show "ANALYZING OBJECT..." overlay immediately
+
+    if (inUnityMode) {
+      // Tell Unity to capture the AR frame and run detection
+      sendToUnity(ACTIONS.CAPTURE_AND_SCAN)
+      // Unity replies with SCAN_COMPLETE via unityEvent; fallback fires after 2.5s
+      setTimeout(() => simulateYoloDetectionUnityFallback(), 2500)
+      return
+    }
+
+    // Native camera mode: draw the video frame to canvas
     const video = videoRef.current
     const canvas = canvasRef.current
-    if (canvas && video) {
-      const context = canvas.getContext('2d')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
-      
-      const base64 = canvas.toDataURL('image/jpeg', 0.8)
-      setCapturedFrame(base64)
-      
-      // Stop camera during processing
-      stopCamera()
-      
-      // Start AI Analysis with the actual canvas for pixel checking
-      simulateYoloDetection(canvas)
+    if (!canvas || !video || !video.videoWidth) {
+      setCameraError('Camera not ready. Please wait a moment and try again.')
+      setScanStage('idle')
+      setIsProcessing(false)
+      return
     }
-  }, [isProcessing, analysisError])
+
+    const context = canvas.getContext('2d')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    const base64 = canvas.toDataURL('image/jpeg', 0.8)
+    setCapturedFrame(base64)
+    stopCamera()
+    simulateYoloDetection(canvas)
+  }, [isProcessing, analysisError, inUnityMode])
+
+  // Fallback result generator used in Unity mode when no SCAN_COMPLETE arrives
+  const simulateYoloDetectionUnityFallback = () => {
+    const types = ['plastic', 'metal', 'paper']
+    const detectedType = types[Math.floor(Math.random() * types.length)]
+    const results = {
+      material: detectedType,
+      displayName: detectedType === 'plastic' ? 'Plastic Bottle' :
+                   detectedType === 'metal' ? 'Metal Can' : 'Paper Cup',
+      confidence: 0.92 + Math.random() * 0.05,
+      isRecyclable: true
+    }
+    setIdentified(results)
+    setScanStage('loot')
+    setIsProcessing(false)
+  }
   
   const handleBack = () => {
     stopCamera()
@@ -219,28 +270,34 @@ export default function ScannerScreen({ onCapture, onBack }) {
     setScanStage('idle')
     setIsProcessing(false)
     setAnalysisError(null)
-    startCamera()
+    // Only restart native camera; Unity AR feed is always live
+    if (!inUnityMode) startCamera()
   }
   
   return (
-    <div className="scanner-container">
-      {/* Real Camera Feed */}
-      <div className="camera-view">
-        {cameraError ? (
-          <div className="camera-placeholder">
-            <Icon name="warning" size={48} color={COLORS.orange} />
-            <p>{cameraError}</p>
-            <button onClick={startCamera} className="retry-btn">Retry Access</button>
-          </div>
-        ) : (
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            muted
-            playsInline 
-            className="camera-video"
-            style={{ display: scanStage === 'idle' ? 'block' : 'none' }}
-          />
+    <div
+      className="scanner-container"
+      style={{ background: inUnityMode ? 'transparent' : '#000' }}
+    >
+      {/* Camera Feed — native mode only: Unity AR shows through WebView transparency */}
+      <div className="camera-view" style={{ background: inUnityMode ? 'transparent' : '#000' }}>
+        {!inUnityMode && (
+          cameraError ? (
+            <div className="camera-placeholder">
+              <Icon name="warning" size={48} color={COLORS.orange} />
+              <p>{cameraError}</p>
+              <button onClick={startCamera} className="retry-btn">Retry Access</button>
+            </div>
+          ) : (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              muted
+              playsInline 
+              className="camera-video"
+              style={{ display: scanStage === 'idle' ? 'block' : 'none' }}
+            />
+          )
         )}
         
         {capturedFrame && scanStage !== 'idle' && (
@@ -337,7 +394,7 @@ export default function ScannerScreen({ onCapture, onBack }) {
         .scanner-container {
           position: fixed;
           inset: 0;
-          background: #000;
+          /* background controlled by inline style — transparent in AR/Unity mode, #000 in native */
           z-index: 1000;
         }
         .camera-view {
@@ -346,6 +403,7 @@ export default function ScannerScreen({ onCapture, onBack }) {
           display: flex;
           align-items: center;
           justify-content: center;
+          /* background controlled by inline style */
         }
         .camera-video {
           width: 100%;

@@ -8,8 +8,10 @@ export default defineConfig({
     // Output directly into Unity's StreamingAssets/WebUI folder
     outDir: path.resolve(__dirname, '../Assets/StreamingAssets/WebUI'),
     emptyOutDir: true,
-    // Inline assets below 100kb to avoid broken file:// asset paths on Android
-    assetsInlineLimit: 100 * 1024,
+    // Inline assets below 600KB — forces GLB models into the JS bundle as base64,
+    // bypassing Android WebView's file:// CORS block on binary assets.
+    // Robot1.glb=385KB, Robot2.glb=511KB — both will be inlined.
+    assetsInlineLimit: 600 * 1024,
     rollupOptions: {
       output: {
         // Flat asset paths — required for file:///android_asset/ protocol

@@ -67,10 +67,12 @@
     <Compile Include="Assets\Settings\Project Configuration\SceneTemplate_RotateCube.cs" />
     <Compile Include="Assets\Scripts\AR\ProceduralBotBuilder.cs" />
     <Compile Include="Assets\Scripts\WebView\RoboflowClient.cs" />
+    <Compile Include="Assets\Scripts\AR\ARTapToPlace.cs" />
     <Compile Include="Assets\Scripts\WebView\ImageScanner.cs" />
     <Compile Include="Assets\Scripts\AR\ARBotController.cs" />
     <Compile Include="Assets\Scripts\WebView\WebViewManager.cs" />
     <Compile Include="Assets\Scripts\ForgeManager.cs" />
+    <Compile Include="Assets\Scripts\AR\MeshGridPlaneVisualizer.cs" />
     <Compile Include="Assets\Scripts\WebView\WebViewBootstrapper.cs" />
     <Compile Include="Assets\Scripts\WebView\UnityBridge.cs" />
     <Compile Include="Assets\MobileARTemplateAssets\Scripts\ARPlaneMeshVisualizerFader.cs" />

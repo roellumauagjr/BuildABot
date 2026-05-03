@@ -309,7 +309,11 @@ export default function BattleScreen({ onBack }: BattleScreenProps) {
                       }}
                     >
                       <div style={{ width: '100%', height: 110, marginBottom: 4 }}>
-                        <RobotPreview robotId={robot.id} isUnlocked={unlocked} />
+                        <RobotPreview 
+                          robotId={robot.id} 
+                          isUnlocked={unlocked} 
+                          active={isActive}
+                        />
                       </div>
                       
                       <div style={{ 
