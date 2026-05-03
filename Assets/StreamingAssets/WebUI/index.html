@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#00000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>BuildABot</title>
+    <!-- Inter font for the Soft Minimalism aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /*
+        CRITICAL FOR AR OVERLAY:
+        html, body, and #root must all be transparent so Unity's AR camera
+        shows through the Gree WebView layer. Screens that need solid
+        backgrounds (Garage, Product) define their own bg-[#F4F5F9].
+      */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body, #root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CkigE-jx.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DXf6oHZG.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

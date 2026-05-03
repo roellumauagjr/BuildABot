@@ -1,0 +1,2 @@
+C:\Users\roels\GAMETECH\BuildABot\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\Users\roels\GAMETECH\BuildABot\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

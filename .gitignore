@@ -1,0 +1,25 @@
+# Unity
+Library/
+Temp/
+obj/
+Build/
+Builds/
+*.log
+
+# IDE
+.vs/
+.idea/
+*.userprefs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Package Cache
+PackageCache/
+
+# Backup
+Assets/Backup/
+
+# Node_modules (too large)
+WebUI-Source/node_modules/
