@@ -61,7 +61,6 @@ public class WebViewManager : MonoBehaviour
         }
 
         Instance = this;
-        DontDestroyOnLoad(gameObject);
         InitialiseWebView();
     }
 
@@ -145,11 +144,14 @@ public class WebViewManager : MonoBehaviour
         InjectBridgeHelpers();
 
         if (autoShowOnLoad)
+        {
             ShowWebView();
+            Debug.Log("[WebViewManager] WebView is now visible.");
+        }
 
-        // Hide the white startup cover canvas now that the React UI is visible.
-        // This is the definitive signal that the screen is ready for the user.
-        ARBotController.Instance?.HideCover();
+        // The startup cover is no longer used as per user request.
+        // The React UI is now the definitive signal that the screen is ready.
+        Debug.Log("[WebViewManager] Page loaded. Ready.");
     }
 
     // ─── JS Bridge injection ──────────────────────────────────────────────
@@ -384,12 +386,19 @@ private void DispatchIncoming(UnityBridge.Message msg)
     {
         Debug.Log($"[WebViewManager] INITIATE_AR payload: {payloadJson}");
         
-        // DO NOT HideWebView here anymore. 
-        // The React UI is the HUD and must remain visible (but transparent).
+        // 1. DELETE/HIDE the React Web UI instantly.
+        HideWebView();
 
         if (ARBotController.Instance != null)
         {
+            // 2. Configure the bot to spawn
             ARBotController.Instance.InitiateARSequence(payloadJson);
+            
+            // 3. CRITICAL FIX: Turn on the Battle Mode (Camera Hardware ON, Planes ON)
+            ARBotController.Instance.SetBattleMode();
+            
+            // 4. Reveal the AR Mobile Native UI
+            ARBotController.Instance.ShowNativeUI();
         }
         else
         {
@@ -417,22 +426,24 @@ private void DispatchIncoming(UnityBridge.Message msg)
                 break;
 
             case "scan":
-                // Scanner page uses the Unity AR camera passthrough as its live feed.
-                // AR stays ON — no getUserMedia(), no camera hardware contention.
-                // The ScannerScreen overlay is transparent so the AR feed shows through.
+                // Scanner page uses the AR camera passthrough as its live feed.
+                // We keep tracking running but hide visual planes for a clean scan.
                 ForgeManager.Instance?.ShowShowcase(false);
-                ARBotController.Instance?.StartAR();
+                ARBotController.Instance?.SetScannerMode();
                 ShowWebView();
-                Debug.Log("[WebViewManager] scan — AR camera ON, shared with scanner overlay.");
+                Debug.Log("[WebViewManager] scan — AR camera ON, visuals hidden.");
                 break;
 
             case "battle":
-                // Battle page: AR starts immediately so ARCore has time to detect planes
-                // before the user taps 'Enter AR Arena'. INITIATE_AR then configures the bot.
+                // Battle page: Full AR experience enabled.
                 ForgeManager.Instance?.ShowShowcase(false);
-                ARBotController.Instance?.StartAR();
-                ShowWebView();
-                Debug.Log("[WebViewManager] battle — AR ON, plane detection running in background.");
+                ARBotController.Instance?.SetBattleMode();
+                
+                // Hide WebView as per user request to use Native AR UI
+                HideWebView();
+                ARBotController.Instance?.ShowNativeUI();
+                
+                Debug.Log("[WebViewManager] battle — Full AR ON (Planes visible), WebView HIDDEN.");
                 break;
 
             default:

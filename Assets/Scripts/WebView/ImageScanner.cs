@@ -200,6 +200,13 @@ public class ImageScanner : MonoBehaviour
         // 1. Guard against missing camera
         if (cameraManager == null) yield break;
 
+        // 1.5. Guard against ARSession not being ready
+        if (ARSession.state != ARSessionState.SessionTracking)
+        {
+            Debug.LogWarning($"[ImageScanner] ARSession not ready. State: {ARSession.state}. Skipping frame capture.");
+            yield break;
+        }
+
         // 2. Grab the latest CPU image from AR camera
         if (!cameraManager.TryAcquireLatestCpuImage(out XRCpuImage image))
         {

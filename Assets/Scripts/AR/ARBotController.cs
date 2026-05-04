@@ -1,25 +1,16 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 using UnityEngine.XR.Templates.AR;
+using UnityEngine.XR.Interaction.Toolkit.Samples.ARStarterAssets;
+#if UNITY_ANDROID
+using UnityEngine.Android;
+#endif
+
 
 /// <summary>
 /// Lightweight AR bridge for BuildABot.
-///
-/// This controller does NOT manage ARSession, ARPlaneManager, or ARRaycastManager.
-/// Those are owned by the "XR Origin (AR Rig)" GameObject, which follows the
-/// standard Unity AR Mobile Template configuration. They run continuously once
-/// the app starts.
-///
-/// Responsibilities of this class:
-///   1. Toggle camera transparency (transparent = AR feed visible, white = solid).
-///   2. Control which robot the ObjectSpawner will place next.
-///   3. Hide the startup cover canvas once the WebView loads.
-///   4. Bridge React UI events (INITIATE_AR, SET_PAGE) to the ObjectSpawner.
-///
-/// Inspector Assignment Checklist:
-///   objectSpawner   → "Object Spawner" under XR Origin (AR Rig)
-///   coverCanvas     → startup white-cover Canvas (if used)
 /// </summary>
 public class ARBotController : MonoBehaviour
 {
@@ -31,42 +22,68 @@ public class ARBotController : MonoBehaviour
     [Tooltip("ObjectSpawner on the XR Origin. objectPrefabs[0]=Robot1, [1]=Robot2.")]
     [SerializeField] private ObjectSpawner objectSpawner;
 
-    [Tooltip("ARTemplateMenuManager on the UI canvas. Its native UI panels are hidden.")]
+    [Tooltip("Legacy Template Menu Manager (if used).")]
     [SerializeField] private ARTemplateMenuManager templateMenuManager;
 
-    [Header("Startup Cover")]
-    [Tooltip("Canvas with a white Image. Hidden once the WebView fires OnPageLoaded.")]
-    [SerializeField] private Canvas coverCanvas;
+    [Tooltip("New Sample Menu Manager (Unity 6 / AR Starter Assets).")]
+    [SerializeField] private ARSampleMenuManager sampleMenuManager;
+
+    // [Header("Startup Cover")]
+    // Removed: StartupCover is no longer used.
 
     // ─── Private ──────────────────────────────────────────────────────────
 
+    private ARSession arSession;
+    private ARCameraManager arCameraManager;
     private ARCameraBackground arCameraBackground;
+    private ARPlaneManager arPlaneManager;
+    private ARPointCloudManager arPointCloudManager;
     private string pendingBotId = "robot1";
+    private bool isInitializingAR = false;
 
     // ─── Unity Lifecycle ──────────────────────────────────────────────────
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
 
-        // Cache ARCameraBackground from the Main Camera
+        // Ensure we have fresh references every time the scene starts
+        FindCoreComponents();
+
+        Application.targetFrameRate = 30;
+        
+        Debug.Log($"[ARBotController] Awake complete. ARSession found: {arSession != null}");
+    }
+
+
+    private void FindCoreComponents()
+    {
+        // 1. Find ARSession (the hardware controller)
+        if (arSession == null) arSession = FindObjectOfType<ARSession>();
+
+        // 3. Cache ARCameraBackground from the Main Camera
         if (Camera.main != null)
             arCameraBackground = Camera.main.GetComponent<ARCameraBackground>();
 
-        // Suppress the AR Template's native UI panels.
-        // We keep the component enabled so internal AR tracking logic continues.
-        HideTemplateUI();
+        // 4. Find ARCameraManager from the Main Camera
+        if (Camera.main != null && arCameraManager == null)
+            arCameraManager = Camera.main.GetComponent<ARCameraManager>();
 
-        // Show cover canvas while WebView loads (if assigned)
-        if (coverCanvas != null)
-            coverCanvas.gameObject.SetActive(true);
+        // 5. Find managers dynamically
+        if (arPlaneManager == null) arPlaneManager = FindObjectOfType<ARPlaneManager>();
+        if (arPointCloudManager == null) arPointCloudManager = FindObjectOfType<ARPointCloudManager>();
+        if (objectSpawner == null) objectSpawner = FindObjectOfType<ObjectSpawner>();
+        
+        if (templateMenuManager == null) templateMenuManager = FindObjectOfType<ARTemplateMenuManager>();
+        if (sampleMenuManager == null) sampleMenuManager = FindObjectOfType<ARSampleMenuManager>();
 
-        // Start with transparent camera so AR shows through WebView.
-        // StopAR() (white camera) is called by WebViewManager for Hub/Forge pages.
-        SetCameraTransparent();
-
-        Application.targetFrameRate = 30;
+        Debug.Log($"[ARBotController] FindCoreComponents: ARSession={arSession != null}, ARCameraManager={arCameraManager != null}, ARCameraBackground={arCameraBackground != null}");
     }
 
     private void OnDestroy()
@@ -74,85 +91,189 @@ public class ARBotController : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // ─── Camera Transparency ──────────────────────────────────────────────
+    // ─── Granular AR Modes ────────────────────────────────────────────────
 
-    /// <summary>
-    /// Makes the camera background transparent so the AR feed renders
-    /// through the WebView overlay. Called for Scan and Battle pages.
-    /// </summary>
-    public void StartAR()
+    public void SetMenuMode()
     {
-        Debug.Log("[ARBotController] StartAR — camera transparent, AR feed visible.");
-        SetCameraTransparent();
+        Debug.Log("[ARBotController] Hub Mode — Camera running behind Web UI.");
+        Application.targetFrameRate = 30;
 
-        if (arCameraBackground != null)
-            arCameraBackground.enabled = true;
-    }
-
-    /// <summary>
-    /// Makes the camera background solid white, hiding the AR feed.
-    /// Called for Hub and Forge pages to conserve resources.
-    /// </summary>
-    public void StopAR()
-    {
-        Debug.Log("[ARBotController] StopAR — camera solid white (Hub/Forge page).");
-        SetCameraWhite();
-
-        if (arCameraBackground != null)
-            arCameraBackground.enabled = false;
-    }
-
-    private void SetCameraTransparent()
-    {
-        if (Camera.main == null) return;
-        Camera.main.clearFlags      = CameraClearFlags.SolidColor;
-        Camera.main.backgroundColor = new Color(0f, 0f, 0f, 0f);
-    }
-
-    private void SetCameraWhite()
-    {
-        if (Camera.main == null) return;
-        Camera.main.clearFlags      = CameraClearFlags.SolidColor;
-        Camera.main.backgroundColor = Color.white;
-    }
-
-    // ─── Startup Cover ────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Called by WebViewManager.OnPageLoaded once the React UI is visible.
-    /// </summary>
-    public void HideCover()
-    {
-        if (coverCanvas != null)
+        // Keep hardware alive so it doesn't lock up, but hide planes
+        if (arSession != null && !arSession.enabled)
         {
-            coverCanvas.gameObject.SetActive(false);
-            Debug.Log("[ARBotController] Cover canvas hidden — WebView is ready.");
+            arSession.enabled = true; 
         }
+
+        ToggleARVisuals(false); 
     }
 
-    // ─── Template UI Suppression ──────────────────────────────────────────
-
-    private void HideTemplateUI()
+    public void SetScannerMode()
     {
-        if (templateMenuManager == null)
+        Debug.Log("[ARBotController] Entering Scanner Mode — Revealing Camera.");
+        Application.targetFrameRate = -1;
+        HideNativeUI();
+        StartCoroutine(EnableARAndHideCover(false)); // false = no AR planes, just video
+    }
+
+    public void SetBattleMode()
+    {
+        Debug.Log("[ARBotController] Entering Battle Mode — Full AR Active.");
+        Application.targetFrameRate = -1;
+        HideNativeUI();
+        StartCoroutine(EnableARAndHideCover(true)); // true = show AR planes
+    }
+
+    private IEnumerator RequestCameraPermission()
+    {
+#if UNITY_ANDROID
+        if (!Permission.HasUserAuthorizedPermission(Permission.Camera))
         {
-            // Try to find it automatically
-            templateMenuManager = FindObjectOfType<ARTemplateMenuManager>();
-            if (templateMenuManager == null)
+            Debug.Log("[ARBotController] Requesting Camera permission...");
+            Permission.RequestUserPermission(Permission.Camera);
+            
+            // Wait for user response
+            float waitTime = 0f;
+            while (!Permission.HasUserAuthorizedPermission(Permission.Camera) && waitTime < 5f)
             {
-                Debug.Log("[ARBotController] ARTemplateMenuManager not found — nothing to hide.");
-                return;
+                yield return new WaitForSeconds(0.5f);
+                waitTime += 0.5f;
+            }
+            
+            if (Permission.HasUserAuthorizedPermission(Permission.Camera))
+                Debug.Log("[ARBotController] Camera permission GRANTED.");
+            else
+                Debug.LogWarning("[ARBotController] Camera permission NOT granted or timed out.");
+        }
+#endif
+        yield return null;
+    }
+
+    private IEnumerator EnableARAndHideCover(bool showVisuals)
+    {
+        if (isInitializingAR) yield break;
+        isInitializingAR = true;
+
+        // 1. Request Permissions
+        yield return StartCoroutine(RequestCameraPermission());
+
+        // 2. Ensure session is on
+        if (arSession != null && !arSession.enabled)
+        {
+            arSession.enabled = true;
+        }
+
+        // (We no longer touch SetCameraTransparent() or arCameraBackground here. 
+        // We let URP handle it natively so it never breaks!)
+
+        // 3. Toggle UI and Visuals
+        ToggleARVisuals(showVisuals);
+        
+        if (showVisuals) {
+            ShowNativeUI();  // Battle Mode
+        } else {
+            HideNativeUI();  // Scanner Mode
+        }
+
+        EnsureDirectionalLight();
+        isInitializingAR = false;
+    }
+
+    private void EnsureDirectionalLight()
+    {
+        Light[] lights = FindObjectsOfType<Light>();
+        bool hasDirLight = false;
+        foreach (var l in lights)
+        {
+            if (l.type == LightType.Directional && l.enabled)
+            {
+                hasDirLight = true;
+                l.intensity = Mathf.Max(l.intensity, 1.2f); // Ensure it's bright enough
+                break;
             }
         }
 
-        // Hide individual UI panels — keep component enabled so plane tracking runs
-        if (templateMenuManager.objectMenu   != null) templateMenuManager.objectMenu.SetActive(false);
-        if (templateMenuManager.createButton != null) templateMenuManager.createButton.gameObject.SetActive(false);
-        if (templateMenuManager.deleteButton != null) templateMenuManager.deleteButton.gameObject.SetActive(false);
-        if (templateMenuManager.cancelButton != null) templateMenuManager.cancelButton.gameObject.SetActive(false);
-        if (templateMenuManager.modalMenu    != null) templateMenuManager.modalMenu.SetActive(false);
+        if (!hasDirLight)
+        {
+            GameObject lightGameObject = new GameObject("AR Emergency Light");
+            Light lightPtr = lightGameObject.AddComponent<Light>();
+            lightPtr.type = LightType.Directional;
+            lightPtr.intensity = 1.2f;
+            lightGameObject.transform.rotation = Quaternion.Euler(50, -30, 0);
+        }
 
-        Debug.Log("[ARBotController] Template UI panels hidden — React WebView is the UI layer.");
+        // Force Trilight ambient mode to prevent pitch-black shadows in AR
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+        RenderSettings.ambientSkyColor = new Color(0.8f, 0.8f, 0.8f);
+        RenderSettings.ambientEquatorColor = new Color(0.5f, 0.5f, 0.5f);
+        RenderSettings.ambientGroundColor = new Color(0.2f, 0.2f, 0.2f);
+        RenderSettings.ambientIntensity = 1.5f;
+    }
+
+
+
+    private void ToggleARVisuals(bool enabled)
+    {
+        if (arPlaneManager != null) arPlaneManager.enabled = enabled;
+        if (arPointCloudManager != null) arPointCloudManager.enabled = enabled;
+
+        // Hide or show existing trackables
+        if (arPlaneManager != null)
+        {
+            foreach (var plane in arPlaneManager.trackables)
+                plane.gameObject.SetActive(enabled);
+        }
+
+        if (arPointCloudManager != null)
+        {
+            foreach (var point in arPointCloudManager.trackables)
+                point.gameObject.SetActive(enabled);
+        }
+    }
+
+    // ─── Legacy Helpers (For Compatibility) ───────────────────────────────
+
+    public void StartAR() => SetScannerMode();
+    public void StopAR() => SetMenuMode();
+
+
+    // ─── Startup Cover ────────────────────────────────────────────────────
+
+    // ─── Native UI Suppression ──────────────────────────────────────────
+
+    public void HideNativeUI()
+    {
+        // Bulletproof Native UI Suppression
+        if (sampleMenuManager != null) 
+        {
+            sampleMenuManager.gameObject.SetActive(false); // Kill the whole manager object
+            if (sampleMenuManager.createButton != null) sampleMenuManager.createButton.gameObject.SetActive(false);
+        }
+        
+        if (templateMenuManager != null) 
+        {
+            templateMenuManager.gameObject.SetActive(false);
+            if (templateMenuManager.createButton != null) templateMenuManager.createButton.gameObject.SetActive(false);
+        }
+
+        Debug.Log("[ARBotController] Native AR UI completely suppressed.");
+    }
+
+    public void ShowNativeUI()
+    {
+        // Bring it back for Battle Mode
+        if (sampleMenuManager != null) 
+        {
+            sampleMenuManager.gameObject.SetActive(true);
+            if (sampleMenuManager.createButton != null) sampleMenuManager.createButton.gameObject.SetActive(true);
+        }
+        
+        if (templateMenuManager != null) 
+        {
+            templateMenuManager.gameObject.SetActive(true);
+            if (templateMenuManager.createButton != null) templateMenuManager.createButton.gameObject.SetActive(true);
+        }
+        
+        Debug.Log("[ARBotController] Native AR UI restored.");
     }
 
     // ─── Bot Selection ────────────────────────────────────────────────────
@@ -160,7 +281,6 @@ public class ARBotController : MonoBehaviour
     /// <summary>
     /// Called by WebViewManager on INITIATE_AR.
     /// Configures the ObjectSpawner to place the correct robot on the next tap.
-    /// The template's ARInteractorSpawnTrigger handles the actual tap → spawn.
     /// </summary>
     public void InitiateARSequence(string payloadJson)
     {
@@ -184,11 +304,6 @@ public class ARBotController : MonoBehaviour
         SetPendingBot(botId);
     }
 
-    /// <summary>
-    /// Sets which robot prefab the ObjectSpawner will place on the next tap.
-    ///   "robot1" / "bot_lvl1" / "0" → index 0 (Robot1.prefab)
-    ///   anything else               → index 1 (Robot2.prefab)
-    /// </summary>
     public void SetPendingBot(string botId)
     {
         if (string.IsNullOrEmpty(botId)) botId = "robot1";
@@ -216,7 +331,6 @@ public class ARBotController : MonoBehaviour
 
     public void Despawn()
     {
-        // Destroy all spawned children of the ObjectSpawner
         if (objectSpawner != null)
         {
             foreach (Transform child in objectSpawner.transform)
