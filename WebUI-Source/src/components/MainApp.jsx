@@ -727,15 +727,36 @@ function StatItem({ label, value, color, delay }) {
 // Screen Wrappers
 function ScannerScreenWrapper({ onBack }) {
   const { addMaterial, addToInventory, addScrap } = useGameStore()
+
   const handleCapture = (item) => {
-    if (item.material && item.isRecyclable) {
-      addMaterial(item.material, 1)
-      addToInventory({
-        ...item,
-        instanceId: `scan_${Date.now()}_${Math.random()}`
-      })
-    }
+    if (!item || !item.material || !item.isRecyclable) return
+
+    const mat = item.material  // 'plastic' | 'metal' | 'paper'
+
+    // +1 to the material count (single call — ScannerScreen no longer calls this)
+    addMaterial(mat, 1)
+
+    // +5–10 scrap reward
+    addScrap(Math.floor(Math.random() * 6) + 5)
+
+    // Full InventoryItem — provides all fields the BuildScreen expects
+    const colorMap   = { plastic: '#007AFF', metal: '#FF9500', paper: '#34C759' }
+    const emojiMap   = { plastic: '🍶',      metal: '🥫',      paper: '📄'      }
+    const nameMap    = { plastic: 'PLASTIC',  metal: 'METAL',   paper: 'PAPER'   }
+    addToInventory({
+      instanceId:  `scan_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id:          Date.now(),
+      name:        nameMap[mat] ?? mat.toUpperCase(),
+      material:    mat,
+      color:       colorMap[mat] ?? '#888',
+      emoji:       emojiMap[mat] ?? '📦',
+      displayName: item.displayName ?? mat,
+      rawClass:    item.rawClass   ?? '',
+      confidence:  item.confidence ?? 1,
+      isRecyclable: true,
+    })
   }
+
   return <ScannerScreen onCapture={handleCapture} onBack={onBack} />
 }
 

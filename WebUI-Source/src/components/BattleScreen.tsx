@@ -26,10 +26,15 @@ export default function BattleScreen({ onBack }: BattleScreenProps) {
 
   const handleStartBattle = () => {
     setPhase('ar')
-    const initialBotId = activeBotId && unlockedRobotIds.includes(activeBotId) ? activeBotId : null
+    // Default to 'robot1' (index 0) if no active/unlocked bot is set.
+    // null botId causes ARBotController.SetPendingBot to receive an empty string
+    // which leaves spawnOptionIndex unchanged or at a bad default.
+    const initialBotId = (activeBotId && unlockedRobotIds.includes(activeBotId))
+      ? activeBotId
+      : 'robot1'
     setSelectedBotId(initialBotId)
     
-    // Explicitly tell Unity to start the AR sequence
+    // Explicitly tell Unity to start the AR sequence with the selected bot
     sendToUnity(ACTIONS.INITIATE_AR, { botId: initialBotId })
   }
 

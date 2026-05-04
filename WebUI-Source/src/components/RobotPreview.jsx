@@ -6,8 +6,11 @@ import * as THREE from 'three'
 // Import GLBs as Vite asset URLs — processed through the build pipeline.
 // With assetsInlineLimit:600KB they become base64 data URIs, eliminating
 // the file:// fetch that Android WebView blocks.
-import robot1Url from '../assets/models/Robot1.glb?url'
-import robot2Url from '../assets/models/Robot2.glb?url'
+// Import WITHOUT ?url — lets Vite honour assetsInlineLimit (600 KB).
+// Both GLBs are ≤ 511 KB so they become base64 data URIs in the bundle,
+// bypassing the Android WebView file:// fetch restriction entirely.
+import robot1Url from '../assets/models/Robot1.glb'
+import robot2Url from '../assets/models/Robot2.glb'
 
 // ─── Silhouette material (locked robots) ─────────────────────────────────────
 const silhouetteMaterial = new THREE.MeshPhongMaterial({

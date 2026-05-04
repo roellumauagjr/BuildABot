@@ -255,6 +255,10 @@ private void DispatchIncoming(UnityBridge.Message msg)
                 HandleCaptureAndScan();
                 break;
 
+            case UnityBridge.SCAN_FRAME_B64:
+                HandleScanFrameB64(msg.payload);
+                break;
+
             case UnityBridge.REQUEST_SCAN_STATE:
                 HandleRequestScanState();
                 break;
@@ -338,6 +342,20 @@ private void DispatchIncoming(UnityBridge.Message msg)
         ImageScanner.Instance?.CaptureAndScan();
     }
 
+    private void HandleScanFrameB64(string payloadJson)
+    {
+        // React captured a frame from getUserMedia() <video> element and sent it as base64.
+        // Forward to ImageScanner which will pass it to Roboflow directly.
+        var p = SafeDeserialise<UnityBridge.ScanFrameB64Payload>(payloadJson);
+        if (p == null || string.IsNullOrEmpty(p.base64Image))
+        {
+            Debug.LogWarning("[WebViewManager] SCAN_FRAME_B64 received but payload is empty.");
+            return;
+        }
+        Debug.Log("[WebViewManager] SCAN_FRAME_B64 — forwarding frame to ImageScanner.");
+        ImageScanner.Instance?.ScanBase64(p.base64Image);
+    }
+
     private void HandleRequestScanState()
     {
         bool scanning = ImageScanner.Instance?.IsScanning ?? false;
@@ -399,20 +417,22 @@ private void DispatchIncoming(UnityBridge.Message msg)
                 break;
 
             case "scan":
-                // Scanner: enable AR camera passthrough immediately
+                // Scanner page uses the Unity AR camera passthrough as its live feed.
+                // AR stays ON — no getUserMedia(), no camera hardware contention.
+                // The ScannerScreen overlay is transparent so the AR feed shows through.
                 ForgeManager.Instance?.ShowShowcase(false);
                 ARBotController.Instance?.StartAR();
                 ShowWebView();
-                Debug.Log("[WebViewManager] scan — AR camera started for passthrough.");
+                Debug.Log("[WebViewManager] scan — AR camera ON, shared with scanner overlay.");
                 break;
 
             case "battle":
-                // Battle LANDING page: AR is off (white background).
-                // AR only activates when user taps "Enter AR Arena" (INITIATE_AR fires).
+                // Battle page: AR starts immediately so ARCore has time to detect planes
+                // before the user taps 'Enter AR Arena'. INITIATE_AR then configures the bot.
                 ForgeManager.Instance?.ShowShowcase(false);
-                ARBotController.Instance?.StopAR();
+                ARBotController.Instance?.StartAR();
                 ShowWebView();
-                Debug.Log("[WebViewManager] battle landing — AR off, waiting for INITIATE_AR.");
+                Debug.Log("[WebViewManager] battle — AR ON, plane detection running in background.");
                 break;
 
             default:

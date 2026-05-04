@@ -118,6 +118,81 @@ public class ImageScanner : MonoBehaviour
         _lastDetection = null;
     }
 
+    // ─── React-side frame scanning ─────────────────────────────────────────
+    // Used when Scanner page is in native camera mode (AR is OFF).
+    // React captures a frame from getUserMedia() <video> via canvas.toDataURL()
+    // and sends it as SCAN_FRAME_B64. We decode and forward to Roboflow.
+
+    /// <summary>
+    /// Accept a base64-encoded JPEG captured by React from its getUserMedia()
+    /// video stream. Decode, send to Roboflow, fire SCAN_COMPLETE or SCAN_EMPTY.
+    /// </summary>
+    public void ScanBase64(string base64Jpeg)
+    {
+        if (IsRequestInFlight)
+        {
+            Debug.Log("[ImageScanner] ScanBase64 skipped — request in flight.");
+            return;
+        }
+
+        // Strip the data URL prefix if React included it
+        const string prefix = "data:image/jpeg;base64,";
+        if (base64Jpeg != null && base64Jpeg.StartsWith(prefix))
+            base64Jpeg = base64Jpeg.Substring(prefix.Length);
+
+        byte[] imageBytes;
+        try
+        {
+            imageBytes = Convert.FromBase64String(base64Jpeg);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[ImageScanner] ScanBase64 — base64 decode failed: " + e.Message);
+            WebViewManager.Instance?.SendToReact(UnityBridge.SCAN_EMPTY);
+            return;
+        }
+
+        Texture2D texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
+        if (!texture.LoadImage(imageBytes))
+        {
+            Debug.LogError("[ImageScanner] ScanBase64 — LoadImage failed.");
+            Destroy(texture);
+            WebViewManager.Instance?.SendToReact(UnityBridge.SCAN_EMPTY);
+            return;
+        }
+
+        Debug.Log($"[ImageScanner] ScanBase64 — decoded {texture.width}×{texture.height}, forwarding to Roboflow.");
+        WebViewManager.Instance?.SendToReact(UnityBridge.SCAN_PROCESSING);
+
+        IsRequestInFlight = true;
+        ScanDetection scanResult = null;
+        bool done = false;
+
+        _client.ScanTexture(texture, (det) => { scanResult = det; done = true; });
+
+        StartCoroutine(WaitForB64Result(texture, () => done, () => scanResult));
+    }
+
+    private System.Collections.IEnumerator WaitForB64Result(
+        Texture2D tex,
+        System.Func<bool> isDone,
+        System.Func<ScanDetection> getResult)
+    {
+        yield return new WaitUntil(isDone);
+
+        IsRequestInFlight = false;
+        Destroy(tex);
+
+        var result = getResult();
+        if (result == null || result.confidence < minimumConfidence)
+        {
+            WebViewManager.Instance?.SendToReact(UnityBridge.SCAN_EMPTY);
+            yield break;
+        }
+
+        FireScanComplete(result);
+    }
+
     // ─── Scan logic ───────────────────────────────────────────────────────
 
     private IEnumerator CaptureAndSend(bool oneShot)
@@ -233,49 +308,55 @@ public class ImageScanner : MonoBehaviour
     private static readonly Dictionary<string, (string material, string displayName, bool isRecyclable)> ClassMap =
         new Dictionary<string, (string, string, bool)>(StringComparer.OrdinalIgnoreCase)
     {
-        // ── Plastic Bottles ────────────────────────────────────────────────
-        { "transparent plastic water bottle", ("PlasticBottle", "Plastic Bottle", true) },
-        { "plastic soda bottle with label",   ("PlasticBottle", "Plastic Bottle", true) },
-        { "crushed plastic bottle",           ("PlasticBottle", "Plastic Bottle", true) },
-        { "plastic bottle",                   ("PlasticBottle", "Plastic Bottle", true) },
+        // ── Plastic Bottles ─────────────────────────────────────────────────
+        // material = "plastic"  matches LootReward.tsx materialData key
+        { "transparent plastic water bottle", ("plastic", "Plastic Bottle", true) },
+        { "plastic soda bottle with label",   ("plastic", "Plastic Bottle", true) },
+        { "crushed plastic bottle",           ("plastic", "Plastic Bottle", true) },
+        { "plastic bottle",                   ("plastic", "Plastic Bottle", true) },
+        { "bottle",                           ("plastic", "Plastic Bottle", true) },
 
-        // ── Aluminum Cans ──────────────────────────────────────────────────
-        { "aluminum soda can",                ("MetalCan", "Aluminum Can", true) },
-        { "crushed metal beverage can",       ("MetalCan", "Aluminum Can", true) },
-        { "tin food can",                     ("MetalCan", "Aluminum Can", true) },
-        { "cylindrical metal can",            ("MetalCan", "Aluminum Can", true) },
-        { "metal can",                        ("MetalCan", "Aluminum Can", true) },
+        // ── Aluminum / Metal Cans ────────────────────────────────────────────
+        // material = "metal"  matches LootReward.tsx materialData key
+        { "aluminum soda can",                ("metal",   "Aluminum Can",   true) },
+        { "crushed metal beverage can",       ("metal",   "Aluminum Can",   true) },
+        { "tin food can",                     ("metal",   "Aluminum Can",   true) },
+        { "cylindrical metal can",            ("metal",   "Aluminum Can",   true) },
+        { "metal can",                        ("metal",   "Aluminum Can",   true) },
+        { "can",                              ("metal",   "Aluminum Can",   true) },
 
-        // ── Cups ───────────────────────────────────────────────────────────
-        { "disposable paper coffee cup",      ("PaperCup", "Paper Cup",    true) },
-        { "white styrofoam cup",              ("PaperCup", "Paper Cup",    true) },
-        { "ceramic coffee mug",               ("PaperCup", "Ceramic Mug",  false) },
-        { "cup",                              ("PaperCup", "Cup",          true) },
+        // ── Cups ─────────────────────────────────────────────────────────────
+        // material = "paper"  matches LootReward.tsx materialData key
+        { "disposable paper coffee cup",      ("paper",   "Paper Cup",      true) },
+        { "white styrofoam cup",              ("paper",   "Paper Cup",      true) },
+        { "ceramic coffee mug",              ("paper",   "Ceramic Mug",    false) },
+        { "cup",                              ("paper",   "Cup",            true) },
+        { "mug",                              ("paper",   "Mug",            true) },
 
-        // ── Paper ──────────────────────────────────────────────────────────
-        { "sheet of white paper",             ("Paper",    "Paper",         true) },
-        { "crumpled paper ball",              ("Paper",    "Paper",         true) },
-        { "cardboard box piece",              ("Paper",    "Cardboard",     true) },
-        { "paper",                            ("Paper",    "Paper",         true) },
+        // ── Paper / Cardboard ─────────────────────────────────────────────────
+        { "sheet of white paper",             ("paper",   "Paper",          true) },
+        { "crumpled paper ball",              ("paper",   "Paper",          true) },
+        { "cardboard box piece",              ("paper",   "Cardboard",      true) },
+        { "paper",                            ("paper",   "Paper",          true) },
 
-        // ── Non-Recyclables / Negative Context ──────────────────────────────
-        { "person",                       ("None", "Person",  false) },
-        { "hand",                         ("None", "Hand",    false) },
-        { "table",                        ("None", "Table",   false) },
-        { "chair",                        ("None", "Chair",   false) },
-        { "laptop",                       ("None", "Laptop",  false) },
-        { "phone",                        ("None", "Phone",   false) },
-        { "potted plant",                 ("None", "Plant",   false) },
-        { "wall",                         ("None", "Wall",    false) },
-        { "floor",                        ("None", "Floor",   false) },
-        { "ceiling",                      ("None", "Ceiling", false) },
-        { "window",                       ("None", "Window",  false) },
-        { "shoe",                         ("None", "Shoe",    false) },
-        { "clothing",                     ("None", "Clothing",false) },
-        { "face",                         ("None", "Face",    false) },
-        { "glasses",                      ("None", "Glasses", false) },
-        { "carpet",                       ("None", "Carpet",  false) },
-        { "door",                         ("None", "Door",    false) },
+        // ── Non-Recyclables / Negative Context ───────────────────────────────
+        { "person",      ("none", "Person",   false) },
+        { "hand",        ("none", "Hand",     false) },
+        { "table",       ("none", "Table",    false) },
+        { "chair",       ("none", "Chair",    false) },
+        { "laptop",      ("none", "Laptop",   false) },
+        { "phone",       ("none", "Phone",    false) },
+        { "potted plant",("none", "Plant",    false) },
+        { "wall",        ("none", "Wall",     false) },
+        { "floor",       ("none", "Floor",    false) },
+        { "ceiling",     ("none", "Ceiling",  false) },
+        { "window",      ("none", "Window",   false) },
+        { "shoe",        ("none", "Shoe",     false) },
+        { "clothing",    ("none", "Clothing", false) },
+        { "face",        ("none", "Face",     false) },
+        { "glasses",     ("none", "Glasses",  false) },
+        { "carpet",      ("none", "Carpet",   false) },
+        { "door",        ("none", "Door",     false) },
     };
 
     private static MaterialInfo MapToMaterial(string label)

@@ -38,6 +38,13 @@ public static class UnityBridge
     /// </summary>
     public const string CAPTURE_AND_SCAN = "CAPTURE_AND_SCAN";
 
+    /// <summary>
+    /// React captured a frame from getUserMedia() and encoded it as base64 JPEG.
+    /// Payload: ScanFrameB64Payload.
+    /// Used when the scanner page is in native camera mode (AR is OFF).
+    /// </summary>
+    public const string SCAN_FRAME_B64 = "SCAN_FRAME_B64";
+
     /// <summary>Request the current scan state from Unity.</summary>
     public const string REQUEST_SCAN_STATE = "REQUEST_SCAN_STATE";
 
@@ -217,5 +224,16 @@ public static class UnityBridge
     {
         public string code;
         public string message;
+    }
+
+    /// <summary>
+    /// Payload for SCAN_FRAME_B64: a base64-encoded JPEG image captured by React
+    /// from the getUserMedia() video stream. Unity forwards this to Roboflow.
+    /// </summary>
+    [Serializable]
+    public class ScanFrameB64Payload
+    {
+        /// <summary>Base64-encoded JPEG image (without the data:image/jpeg;base64, prefix).</summary>
+        public string base64Image;
     }
 }

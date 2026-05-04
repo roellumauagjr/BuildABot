@@ -62,6 +62,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Editor\InternetPermissionSetter.cs" />
+    <Compile Include="Assets\Editor\WireRobotPrefabs.cs" />
+    <Compile Include="Assets\Editor\WireARBotController.cs" />
+    <Compile Include="Assets\Editor\FixARPlaneShader.cs" />
     <Compile Include="Assets\Scripts\WebView\Editor\WebViewSceneSetup.cs" />
     <Compile Include="Assets\Scripts\Editor\AndroidManifestPostProcessor.cs" />
   </ItemGroup>
