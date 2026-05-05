@@ -36,7 +36,7 @@ const MATERIAL_MAP = {
 }
 
 export default function App() {
-  const { addMaterial, addToInventory, addScrap } = useGameStore()
+  const { addMaterial, addToInventory, addScrap, materials } = useGameStore()
   const [isLoading, setIsLoading] = useState(true)
   
   // Listen for Unity events
@@ -66,13 +66,35 @@ export default function App() {
           console.error('Failed to parse scan result:', err)
         }
       }
+      
+      // Handle Battle Rewards from AR Battle
+      if (action === 'BATTLE_REWARD') {
+        try {
+          const data = typeof payload === 'string' ? JSON.parse(payload) : payload
+          
+          // Apply material changes (positive for win, negative for loss)
+          if (data.plastic !== 0) addMaterial('plastic', data.plastic)
+          if (data.metal !== 0) addMaterial('metal', data.metal)
+          if (data.paper !== 0) addMaterial('paper', data.paper)
+          
+          // Show toast notification (you can replace this with your actual toast system)
+          console.log(`[BATTLE] ${data.message}`)
+          
+          // Optional: Add scrap bonus for win
+          if (data.won) {
+            addScrap(Math.floor(Math.random() * 11) + 10) // +10-20 scrap for win
+          }
+        } catch (err) {
+          console.error('Failed to parse battle reward:', err)
+        }
+      }
     }
     
     if (typeof window !== 'undefined') {
       window.addEventListener('unityEvent', handleUnityEvent)
       return () => window.removeEventListener('unityEvent', handleUnityEvent)
     }
-  }, [addMaterial, addToInventory, addScrap])
+  }, [addMaterial, addToInventory, addScrap, materials])
   
   // Show loading while Zustand hydrates
   useEffect(() => {

@@ -62,6 +62,16 @@ public class ARBotController : MonoBehaviour
     }
 
 
+    private void Update()
+    {
+        // Handle Android physical Back Button
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            ExitBattleAndReturnToMenu();
+        }
+    }
+
+
     private void FindCoreComponents()
     {
         // 1. Find ARSession (the hardware controller)
@@ -119,7 +129,13 @@ public class ARBotController : MonoBehaviour
     {
         Debug.Log("[ARBotController] Entering Battle Mode — Full AR Active.");
         Application.targetFrameRate = -1;
-        HideNativeUI();
+                HideNativeUI();
+
+        // Clear UI focus to ensure physical back button is registered
+        if (UnityEngine.EventSystems.EventSystem.current != null)
+        {
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+        }
         StartCoroutine(EnableARAndHideCover(true)); // true = show AR planes
     }
 
@@ -242,20 +258,20 @@ public class ARBotController : MonoBehaviour
 
     public void HideNativeUI()
     {
-        // Bulletproof Native UI Suppression
+        // Bulletproof Native UI Suppression - Only disable specific UI elements, NOT the entire UI
         if (sampleMenuManager != null) 
         {
-            sampleMenuManager.gameObject.SetActive(false); // Kill the whole manager object
+            // Disable specific buttons instead of entire game object
             if (sampleMenuManager.createButton != null) sampleMenuManager.createButton.gameObject.SetActive(false);
+            if (sampleMenuManager.deleteButton != null) sampleMenuManager.deleteButton.gameObject.SetActive(false);
         }
         
         if (templateMenuManager != null) 
         {
-            templateMenuManager.gameObject.SetActive(false);
             if (templateMenuManager.createButton != null) templateMenuManager.createButton.gameObject.SetActive(false);
         }
 
-        Debug.Log("[ARBotController] Native AR UI completely suppressed.");
+        Debug.Log("[ARBotController] Native AR UI suppressed (Back Button preserved).");
     }
 
     public void ShowNativeUI()
@@ -263,13 +279,12 @@ public class ARBotController : MonoBehaviour
         // Bring it back for Battle Mode
         if (sampleMenuManager != null) 
         {
-            sampleMenuManager.gameObject.SetActive(true);
             if (sampleMenuManager.createButton != null) sampleMenuManager.createButton.gameObject.SetActive(true);
+            if (sampleMenuManager.deleteButton != null) sampleMenuManager.deleteButton.gameObject.SetActive(true);
         }
         
         if (templateMenuManager != null) 
         {
-            templateMenuManager.gameObject.SetActive(true);
             if (templateMenuManager.createButton != null) templateMenuManager.createButton.gameObject.SetActive(true);
         }
         
@@ -337,5 +352,63 @@ public class ARBotController : MonoBehaviour
                 Destroy(child.gameObject);
         }
         Debug.Log("[ARBotController] All spawned AR objects removed.");
+    }
+
+
+    public void ExitBattleAndReturnToMenu()
+    {
+        Debug.Log("[ARBotController] Exiting AR... returning to Hub.");
+        
+        // 1. Tell React to navigate back to the hub page
+        if (WebViewManager.Instance != null)
+        {
+            WebViewManager.Instance.SendToReact(UnityBridge.SET_PAGE, new UnityBridge.SetPagePayload { page = "hub" });
+        }
+        
+        // 2. FULLY STOP AR
+        // Disable AR Session
+        if (arSession != null)
+        {
+            arSession.enabled = false;
+            Debug.Log("[ARBotController] AR Session DISABLED.");
+        }
+        
+        // Disable AR Camera Manager
+        if (arCameraManager != null)
+        {
+            arCameraManager.enabled = false;
+            Debug.Log("[ARBotController] AR Camera Manager DISABLED.");
+        }
+        
+        // Disable the actual camera to stop rendering
+        Camera arCamera = GetComponentInChildren<Camera>(true);
+        if (arCamera == null && arCameraManager != null)
+            arCamera = arCameraManager.GetComponent<Camera>();
+        if (arCamera == null)
+            arCamera = Camera.main;
+            
+        if (arCamera != null)
+        {
+            arCamera.enabled = false;
+            Debug.Log("[ARBotController] AR Camera DISABLED.");
+        }
+        
+        // Clear AR background rendering
+        if (arCameraBackground != null)
+            arCameraBackground.enabled = false;
+            
+        ToggleARVisuals(false);
+        
+        // 3. Hide Native AR UI
+        HideNativeUI();
+        
+        // 4. SHOW WEBVIEW - This makes the Hub UI visible again!
+        if (WebViewManager.Instance != null)
+        {
+            WebViewManager.Instance.ShowWebView();
+            Debug.Log("[ARBotController] WebView SHOWN - Hub should be visible.");
+        }
+        
+        Debug.Log("[ARBotController] AR completely stopped. Back to Hub.");
     }
 }

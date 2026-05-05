@@ -202,6 +202,29 @@ public class WebViewManager : MonoBehaviour
     public void HideWebView() => _webView?.SetVisibility(false);
     public bool IsPageReady  => _isPageReady;
 
+    /// <summary>
+    /// Returns the player to the Battle landing/entry page in React.
+    /// Shows the WebView and dispatches a NAVIGATE_TO_BATTLE event so React
+    /// can do an internal page transition — without triggering HandleSetPage's
+    /// "battle" branch (which would re-hide the WebView and re-enter AR).
+    /// </summary>
+    public void NavigateToBattleLanding()
+    {
+        ShowWebView();
+
+        if (!_isPageReady) return;
+
+        // Dispatch a lightweight JS event that React listens to for an internal
+        // navigation back to the battle entry screen.
+        _webView.EvaluateJS(
+            "window.dispatchEvent(new CustomEvent('unityNavigate', { detail: { page: 'battle' } }));"
+        );
+
+        SetCurrentPage("battle_landing");
+        Debug.Log("[WebViewManager] NavigateToBattleLanding — WebView shown, React notified.");
+    }
+
+
     // ─── React → Unity (incoming) ─────────────────────────────────────────
 
     /// <summary>

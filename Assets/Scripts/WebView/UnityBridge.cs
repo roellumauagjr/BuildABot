@@ -103,6 +103,12 @@ public static class UnityBridge
     /// <summary>Generic error event — UI should show a toast/modal.</summary>
     public const string ERROR = "ERROR";
 
+    /// <summary>
+    /// Battle completed — send win/loss result and material rewards to React.
+    /// Payload: BattleRewardPayload.
+    /// </summary>
+    public const string BATTLE_REWARD = "BATTLE_REWARD";
+
     // ─── Message envelope ─────────────────────────────────────────────────
 
     /// <summary>
@@ -235,5 +241,19 @@ public static class UnityBridge
     {
         /// <summary>Base64-encoded JPEG image (without the data:image/jpeg;base64, prefix).</summary>
         public string base64Image;
+    }
+
+    /// <summary>
+    /// Fired when battle ends — sends material reward/penalty to React.
+    /// Positive amount = reward (win), negative = penalty (loss).
+    /// </summary>
+    [Serializable]
+    public class BattleRewardPayload
+    {
+        public bool won;           // true = player won, false = player lost
+        public int plastic;        // amount to add (can be negative)
+        public int metal;          // amount to add (can be negative)
+        public int paper;          // amount to add (can be negative)
+        public string message;     // display message for the player
     }
 }
